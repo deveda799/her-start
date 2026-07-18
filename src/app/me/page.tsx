@@ -149,6 +149,9 @@ export default function MePage() {
           result={r}
           points={progress.points}
           createdAt={progress.createdAt}
+          displayName={progress.displayName}
+          showNameInReport={progress.showNameInReport}
+          isDemo={progress.mode === "demo" || progress.isDemo}
           onClose={() => setShowReport(false)}
         />
       )}

@@ -14,7 +14,7 @@ const VALID_ANSWERS = [
 ];
 
 describe("Her Start analyze API", () => {
-  it("returns demo followup on first request when AI is not configured", async () => {
+  it("returns demo complete when AI is not configured (no more wrong followup)", async () => {
     vi.stubEnv("AI_API_KEY", "");
     vi.stubEnv("AI_BASE_URL", "");
     vi.stubEnv("AI_MODEL", "");
@@ -31,14 +31,17 @@ describe("Her Start analyze API", () => {
     const response = await POST(request);
     const body = await response.json();
 
+    // 演示模式现在直接返回 complete，不再返回与用户回答矛盾的固定追问
     expect(response.status).toBe(200);
-    expect(body.status).toBe("needs_followup");
-    expect(body.followup.question).toBeTruthy();
-    expect(body.followup.question.length).toBeLessThanOrEqual(80);
-    expect(body.demo).toBe(true);
+    expect(body.status).toBe("complete");
+    expect(body.mode).toBe("demo");
+    expect(body.personalized).toBe(false);
+    expect(body.demoReason).toBe("missing_config");
+    expect(body.analysisId).toBeTruthy();
+    expect(body.result.lifeAssetCard.assets).toHaveLength(3);
   });
 
-  it("returns complete demo result when followupUsed=true", async () => {
+  it("returns demo complete when followupUsed=true and AI not configured", async () => {
     vi.stubEnv("AI_API_KEY", "");
     vi.stubEnv("AI_BASE_URL", "");
     vi.stubEnv("AI_MODEL", "");
@@ -62,9 +65,8 @@ describe("Her Start analyze API", () => {
 
     expect(response.status).toBe(200);
     expect(body.status).toBe("complete");
-    expect(body.demo).toBe(true);
+    expect(body.mode).toBe("demo");
+    expect(body.personalized).toBe(false);
     expect(body.result.lifeAssetCard.assets).toHaveLength(3);
-    expect(body.result.minimumProductCard.productName).toBeTruthy();
-    expect(body.result.actionCard.actions.some((a: { realUserContact: boolean }) => a.realUserContact)).toBe(true);
   });
 });

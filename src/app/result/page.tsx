@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useProgress, getLevel } from "@/lib/her-start/use-progress";
+import { useProgress, getLevel, getDisplayName } from "@/lib/her-start/use-progress";
 import { BottomNav } from "@/components/her-start/bottom-nav";
 import { BadgeSeal } from "@/components/her-start/brand-icons";
 import { BrandReport } from "@/components/her-start/brand-report";
 
 export default function ResultPage() {
   const router = useRouter();
-  const { progress, update, reset, loaded } = useProgress();
+  const { progress, update, loaded } = useProgress();
   const [showReport, setShowReport] = useState(false);
 
   useEffect(() => {
@@ -30,14 +30,20 @@ export default function ResultPage() {
 
   const r = progress.result;
   const level = getLevel(progress.points);
+  const displayName = getDisplayName(progress.displayName);
+  const isDemo = progress.mode === "demo" || progress.isDemo;
 
   function regenerate() {
+    // 清除旧结果但保留回答和称呼
     update({
       result: null,
-      isDemo: false,
-      points: 0,
+      mode: null,
+      analysisId: null,
+      demoReason: null,
+      personalized: false,
       followupQuestion: null,
       followupAnswer: null,
+      points: 0,
       createdAt: null,
     });
     router.push("/interview");
@@ -52,8 +58,8 @@ export default function ResultPage() {
       <main className="page-content result-page">
         {/* 顶部 */}
         <div className="result-top">
-          <div className="result-eyebrow">你的开局成果</div>
-          <h1 className="result-title">你的人生资产，正在成为产品</h1>
+          <div className="result-eyebrow">{displayName}的开局成果</div>
+          <h1 className="result-title">{displayName}的人生资产开局报告</h1>
           <div className="result-badge-bar">
             <span className="result-stat">{progress.points} 经验值</span>
             <span className="result-stat">Lv{level.level} {level.name}</span>
@@ -61,11 +67,21 @@ export default function ResultPage() {
           </div>
         </div>
 
-        {/* 演示提示 */}
-        {progress.isDemo && (
-          <div className="demo-banner" role="status">
-            <strong>当前展示演示结果</strong>
-            正式分析需要连接 AI 服务。这份案例不是针对你的真实分析。
+        {/* 模式提示 */}
+        {isDemo ? (
+          <div className="demo-banner" role="status" style={{ background: "#FEF0EE", borderColor: "#E8B5B0", color: "#8B2D26" }}>
+            <strong>当前为演示结果</strong>
+            当前AI服务尚未连接或暂时不可用，以下内容为功能示例，不是根据你本次回答生成的个性化分析。
+            <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button className="btn btn-primary" style={{ minHeight: "40px", fontSize: "14px" }} onClick={regenerate}>
+                重新尝试AI分析
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="demo-banner" role="status" style={{ background: "var(--emerald-light)", borderColor: "var(--emerald-bright)", color: "var(--emerald-deep)" }}>
+            <strong>已根据你本次提供的经历生成个性化分析。</strong>
+            报告中的事实引用来自你的回答，商业价值与价格均为待验证假设。
           </div>
         )}
 
@@ -200,6 +216,9 @@ export default function ResultPage() {
           result={r}
           points={progress.points}
           createdAt={progress.createdAt}
+          displayName={progress.displayName}
+          showNameInReport={progress.showNameInReport}
+          isDemo={isDemo}
           onClose={() => setShowReport(false)}
         />
       )}

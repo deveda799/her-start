@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useProgress, saveProgress } from "@/lib/her-start/use-progress";
+import { useProgress, saveProgress, getCachedResult, setCachedResult, clearAnalysisResult } from "@/lib/her-start/use-progress";
 import { demoAnalysis } from "@/lib/her-start/demo";
 import type { HerStartAnalysis } from "@/lib/her-start/schema";
 
@@ -13,11 +13,19 @@ const LOADING_LINES = [
   "正在生成你的第一个最小产品……",
 ];
 
-type AnalyzeResponse =
-  | { status: "complete"; result: HerStartAnalysis; demo?: boolean; message?: string }
-  | { status: "needs_followup"; followup: { question: string; missingReason: string }; demo?: boolean };
+type AnalyzeResponse = {
+  status: "complete" | "needs_followup";
+  result?: HerStartAnalysis;
+  followup?: { question: string; missingReason: string };
+  mode?: "ai" | "demo";
+  personalized?: boolean;
+  demoReason?: string;
+  analysisId?: string;
+  message?: string;
+  demo?: boolean;
+};
 
-type PageState = "loading" | "error" | "redirecting";
+type PageState = "loading" | "error";
 
 export default function AnalyzingPage() {
   const router = useRouter();
@@ -25,45 +33,63 @@ export default function AnalyzingPage() {
   const [line, setLine] = useState(0);
   const [pageState, setPageState] = useState<PageState>("loading");
   const [errorMsg, setErrorMsg] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
 
-  // 只在 loaded 后执行一次分析
   useEffect(() => {
     if (!loaded) return;
 
-    // 校验：四问必须全部有内容
+    // 立即清除旧结果，防止闪现上一份报告
+    clearAnalysisResult();
+    update({ result: null, mode: null, analysisId: null, demoReason: null });
+
     if (!progress.answers.every((a) => a.trim().length > 0)) {
       router.push("/interview");
       return;
     }
 
     const timer = setInterval(() => setLine((l) => (l + 1) % 4), 2000);
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     void doAnalyze();
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      controller.abort();
+    };
 
     async function doAnalyze() {
-      // 读取最新的 localStorage（避免 closure capture 问题）
       const fresh = saveProgress({});
       const answers = fresh.answers;
       const followupQuestion = fresh.followupQuestion;
       const followupAnswer = fresh.followupAnswer;
+
+      // 检查本地缓存（仅 AI 个性化结果）
+      const cached = getCachedResult(answers, followupQuestion ?? undefined, followupAnswer ?? undefined);
+      if (cached) {
+        saveProgress({
+          result: cached,
+          isDemo: false,
+          mode: "ai",
+          personalized: true,
+          points: 100,
+          createdAt: new Date().toISOString(),
+        });
+        router.push("/result");
+        return;
+      }
 
       const body: Record<string, unknown> = {
         answers,
         requestId: crypto.randomUUID(),
       };
 
-      // 如果已有追问和回答，带上 followupUsed=true
       if (followupQuestion && followupAnswer) {
-        body.followup = {
-          question: followupQuestion,
-          answer: followupAnswer,
-        };
+        body.followup = { question: followupQuestion, answer: followupAnswer };
         body.followupUsed = true;
       }
 
       try {
-        const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30_000);
         const res = await fetch("/api/analyze", {
           method: "POST",
@@ -73,37 +99,42 @@ export default function AnalyzingPage() {
         });
         clearTimeout(timeout);
 
-        if (!res.ok) {
-          throw new Error(`HTTP_${res.status}`);
-        }
+        if (!res.ok) throw new Error(`HTTP_${res.status}`);
         const data = (await res.json()) as AnalyzeResponse;
 
+        // 如果请求被中止（用户已离开页面），不处理响应
+        if (controller.signal.aborted) return;
+
         if (data.status === "needs_followup" && !body.followupUsed) {
-          // 需要追问，保存追问问题，跳回聊天页
-          saveProgress({ followupQuestion: data.followup.question });
-          setPageState("redirecting");
+          saveProgress({ followupQuestion: data.followup?.question });
           router.push("/interview?followup=1");
           return;
         }
 
-        if (data.status === "complete") {
+        if (data.status === "complete" && data.result) {
+          // 仅缓存 AI 个性化结果，不缓存演示结果
+          if (data.mode === "ai" && data.personalized) {
+            setCachedResult(answers, data.result, followupQuestion ?? undefined, followupAnswer ?? undefined);
+          }
+
           saveProgress({
             result: data.result,
-            isDemo: Boolean(data.demo),
+            isDemo: data.mode === "demo",
+            mode: data.mode ?? "demo",
+            personalized: data.personalized ?? false,
+            analysisId: data.analysisId ?? null,
+            demoReason: data.demoReason ?? null,
             points: 100,
             createdAt: new Date().toISOString(),
           });
-          if (data.message) {
-            // 限流提示，但仍展示结果
-          }
-          setPageState("redirecting");
           router.push("/result");
           return;
         }
 
         throw new Error("UNKNOWN_STATUS");
       } catch (err) {
-        // 失败兜底：使用演示数据
+        if (controller.signal.aborted) return;
+
         const isAbort = err instanceof Error && err.name === "AbortError";
         const reason = isAbort
           ? "AI 分析超时，已为你展示演示结果。你可以稍后重试。"
@@ -112,6 +143,9 @@ export default function AnalyzingPage() {
         saveProgress({
           result: demoAnalysis,
           isDemo: true,
+          mode: "demo",
+          personalized: false,
+          demoReason: isAbort ? "timeout" : "provider_error",
           points: 100,
           createdAt: new Date().toISOString(),
         });
@@ -123,9 +157,10 @@ export default function AnalyzingPage() {
   }, [loaded]);
 
   function retry() {
+    abortRef.current?.abort();
+    clearAnalysisResult();
     setPageState("loading");
     setErrorMsg("");
-    // 重新触发分析
     window.location.reload();
   }
 
@@ -133,6 +168,9 @@ export default function AnalyzingPage() {
     saveProgress({
       result: demoAnalysis,
       isDemo: true,
+      mode: "demo",
+      personalized: false,
+      demoReason: "provider_error",
       points: 100,
       createdAt: new Date().toISOString(),
     });

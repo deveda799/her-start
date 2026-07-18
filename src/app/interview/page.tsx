@@ -41,6 +41,12 @@ const Q4_OPTIONS = [
 
 const MAX_PER = 500;
 const MAX_TOTAL = 3000;
+const NAME_STEP = -1; // 称呼步骤
+
+function sanitizeName(raw: string): string {
+  // 去首尾空格，过滤 HTML/脚本标签
+  return raw.trim().replace(/[<>]/g, "").slice(0, 20);
+}
 
 function InterviewContent() {
   const router = useRouter();
@@ -49,11 +55,13 @@ function InterviewContent() {
   const { progress, update, loaded } = useProgress();
   const [step, setStep] = useState(0);
   const [answer, setAnswer] = useState("");
+  const [nameInput, setNameInput] = useState("");
   const [followupAnswer, setFollowupAnswer] = useState("");
   const [error, setError] = useState("");
   const [chips, setChips] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const chatBodyRef = useRef<HTMLDivElement>(null);
 
   const stage = getStage(progress);
@@ -69,14 +77,18 @@ function InterviewContent() {
       setFollowupAnswer(progress.followupAnswer ?? "");
       return;
     }
-    const s = Math.min(progress.step, 3);
-    setStep(s);
-    setAnswer(progress.answers[s] ?? "");
+    // 如果有 displayName，跳过称呼步骤
+    const startStep = progress.displayName ? Math.min(progress.step, 3) : NAME_STEP;
+    setStep(startStep);
+    setNameInput(progress.displayName ?? "");
+    if (startStep >= 0) {
+      setAnswer(progress.answers[startStep] ?? "");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, isFollowup]);
 
   useEffect(() => {
-    if (!isFollowup) {
+    if (step >= 0 && !isFollowup) {
       setAnswer(progress.answers[step] ?? "");
       setChips([]);
       setError("");
@@ -85,13 +97,36 @@ function InterviewContent() {
   }, [step]);
 
   useEffect(() => {
-    textareaRef.current?.focus();
+    if (step === NAME_STEP) {
+      nameInputRef.current?.focus();
+    } else {
+      textareaRef.current?.focus();
+    }
     if (chatBodyRef.current) {
       chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
     }
   }, [step, isFollowup]);
 
   const totalChars = progress.answers.reduce((s, a) => s + a.length, 0) - (progress.answers[step]?.length ?? 0) + answer.length;
+
+  function submitName() {
+    const clean = sanitizeName(nameInput);
+    if (clean && clean.length < 2) {
+      setError("称呼至少2个字符，或留空跳过。");
+      return;
+    }
+    setError("");
+    saveProgress({ displayName: clean });
+    update({ displayName: clean });
+    setStep(0);
+  }
+
+  function skipName() {
+    setError("");
+    saveProgress({ displayName: "" });
+    update({ displayName: "" });
+    setStep(0);
+  }
 
   function next() {
     if (submitting) return;
@@ -106,7 +141,6 @@ function InterviewContent() {
     }
     setError("");
 
-    // 同步写入 localStorage（确保 /analyzing 页面能读到最新数据）
     const nextAnswers = [...progress.answers];
     nextAnswers[step] = answer;
     saveProgress({ answers: nextAnswers, step });
@@ -114,7 +148,6 @@ function InterviewContent() {
     if (step < 3) {
       setStep(step + 1);
     } else {
-      // 四问完成，进入分析流程
       setSubmitting(true);
       update({ answers: nextAnswers, step });
       router.push("/analyzing");
@@ -123,10 +156,13 @@ function InterviewContent() {
 
   function prev() {
     if (submitting) return;
-    if (step === 0) return;
-    const nextAnswers = [...progress.answers];
-    nextAnswers[step] = answer;
-    saveProgress({ answers: nextAnswers, step });
+    if (step === 0) {
+      // 回到称呼步骤
+      setNameInput(progress.displayName ?? "");
+      setStep(NAME_STEP);
+      return;
+    }
+    saveProgress({ answers: progress.answers, step });
     setStep(step - 1);
   }
 
@@ -222,6 +258,58 @@ function InterviewContent() {
     );
   }
 
+  // ===== 称呼步骤 =====
+  if (step === NAME_STEP) {
+    return (
+      <div className="chat-page">
+        <div className="chat-top">
+          <div className="chat-top-title">开始之前</div>
+          <div className="chat-top-sub">称呼（选填）</div>
+          <div className="chat-top-progress">
+            <span style={{ width: "5%" }} />
+          </div>
+        </div>
+        <div className="chat-body" ref={chatBodyRef}>
+          <div className="chat-bubble-row">
+            <div className="chat-avatar">镜</div>
+            <div className="chat-bubble ai">
+              <div className="chat-question-eyebrow">VALUE MIRROR</div>
+              <div className="chat-question-title">怎么称呼你？</div>
+              <div className="chat-question-hint">
+                填写昵称即可，无需使用真实姓名。这个称呼会出现在你的人生资产报告中。
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="chat-input-area">
+          <input
+            ref={nameInputRef}
+            type="text"
+            className="chat-textarea"
+            style={{ minHeight: "52px", maxHeight: "52px" }}
+            value={nameInput}
+            maxLength={20}
+            placeholder="例如：玉琴、小林、Jenny（留空则显示「你」）"
+            onChange={(e) => { setNameInput(e.target.value); setError(""); }}
+            aria-label="称呼"
+          />
+          <div className="chat-meta">
+            <span className={error ? "chat-meta-error" : ""} role="alert">{error}</span>
+            <span>{nameInput.length} / 20</span>
+          </div>
+          <div className="chat-actions">
+            <button className="btn btn-secondary" onClick={skipName} disabled={submitting} style={{ flex: 1 }}>
+              跳过
+            </button>
+            <button className="btn btn-primary" onClick={submitName} disabled={submitting} style={{ flex: 2 }}>
+              继续
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ===== 标准四问模式 =====
   const q = QUESTIONS[step];
   const progressPercent = ((step + 1) / 4) * 100;
@@ -287,7 +375,7 @@ function InterviewContent() {
           <span>{answer.length} / {MAX_PER} · 共 {totalChars} / {MAX_TOTAL}</span>
         </div>
         <div className="chat-actions">
-          <button className="btn btn-secondary" onClick={prev} disabled={step === 0 || submitting} style={{ flex: 1 }}>
+          <button className="btn btn-secondary" onClick={prev} disabled={submitting} style={{ flex: 1 }}>
             上一步
           </button>
           <button

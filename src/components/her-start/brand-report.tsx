@@ -2,20 +2,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { HerStartAnalysis } from "@/lib/her-start/schema";
+import { getDisplayName } from "@/lib/her-start/use-progress";
 
 type BrandReportProps = {
   result: HerStartAnalysis;
   points: number;
   createdAt: string | null;
+  displayName?: string;
+  showNameInReport?: boolean;
+  isDemo?: boolean;
   onClose: () => void;
 };
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://her-start.codebanana.app";
 
-export function BrandReport({ result, points, createdAt, onClose }: BrandReportProps) {
+export function BrandReport({ result, points, createdAt, displayName, showNameInReport = true, isDemo = false, onClose }: BrandReportProps) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const reportRef = useRef<HTMLDivElement>(null);
+
+  const displayLabel = showNameInReport ? getDisplayName(displayName) : "我";
 
   useEffect(() => {
     let mounted = true;
@@ -28,8 +34,6 @@ export function BrandReport({ result, points, createdAt, onClose }: BrandReportP
           pixelRatio: 2,
           backgroundColor: "#FAF8F3",
           width: 375,
-          height: undefined,
-          style: { transform: "none" },
         });
         if (mounted) {
           setImageUrl(dataUrl);
@@ -53,16 +57,13 @@ export function BrandReport({ result, points, createdAt, onClose }: BrandReportP
       const file = new File([blob], "her-start-report.png", { type: "image/png" });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          title: "我的人生资产开局报告",
-          text: "我用她来开局，看见了被自己低估的人生资产。",
+          title: `${displayLabel}的人生资产开局报告`,
+          text: `我用她来开局，看见了被自己低估的人生资产。`,
           files: [file],
         });
         return;
       }
-    } catch {
-      // 用户取消或失败，静默
-    }
-    // 不支持 Web Share API 时，提示长按保存
+    } catch { /* 用户取消 */ }
     alert("请长按上方图片保存，然后分享给朋友。");
   }
 
@@ -80,7 +81,6 @@ export function BrandReport({ result, points, createdAt, onClose }: BrandReportP
       await navigator.clipboard.writeText(text);
       alert("链接已复制到剪贴板");
     } catch {
-      // 兜底
       const ta = document.createElement("textarea");
       ta.value = text;
       document.body.appendChild(ta);
@@ -120,7 +120,7 @@ export function BrandReport({ result, points, createdAt, onClose }: BrandReportP
         {status === "ready" && imageUrl && (
           <>
             <div className="report-image-area">
-              <img src={imageUrl} alt="我的人生资产开局报告" />
+              <img src={imageUrl} alt={`${displayLabel}的人生资产开局报告`} />
               <p style={{ fontSize: "12px", color: "var(--text-sub)", marginTop: "10px", lineHeight: 1.5 }}>
                 微信用户请长按图片保存到手机
               </p>
@@ -140,13 +140,23 @@ export function BrandReport({ result, points, createdAt, onClose }: BrandReportP
               <div className="report-brand-title">她来开局</div>
               <div className="report-brand-sub">HER START</div>
               <div className="report-brand-ai">Value Mirror · 价值镜</div>
-              <div className="report-brand-h1">我的人生资产开局报告</div>
+              <div className="report-brand-h1">{displayLabel}的人生资产开局报告</div>
               <div style={{ fontSize: "12px", marginTop: "10px", opacity: 0.7 }}>
                 女性人生资产发现与商业化AI陪练
               </div>
             </div>
 
             <div className="report-body">
+              {isDemo && (
+                <div style={{
+                  padding: "10px 14px", marginBottom: "16px",
+                  background: "#FEF0EE", borderRadius: "10px",
+                  fontSize: "12px", color: "#8B2D26", lineHeight: 1.55,
+                }}>
+                  <strong>当前为演示结果</strong>，以下内容不是根据你本次回答生成的个性化分析。
+                </div>
+              )}
+
               <div className="report-section">
                 <div className="report-section-title">价值定位</div>
                 <p>{result.lifeAssetCard.valuePositioning}</p>
@@ -202,7 +212,7 @@ export function BrandReport({ result, points, createdAt, onClose }: BrandReportP
                 background: "var(--gold-soft)", borderRadius: "10px",
                 fontSize: "12px", color: "#5C4A1F", lineHeight: 1.55,
               }}>
-                商业价值待验证声明：本报告由AI生成，其中商业价值与价格均为待验证假设，不构成收入承诺。真实答案需通过潜在用户验证。
+                商业价值待验证声明：本报告{isDemo ? "为演示示例" : "由AI生成"}，其中商业价值与价格均为待验证假设，不构成收入承诺。真实答案需通过潜在用户验证。
               </div>
             </div>
 

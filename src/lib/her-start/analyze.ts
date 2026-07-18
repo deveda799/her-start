@@ -64,9 +64,16 @@ const FINALIZE_PROMPT = `你是Value Mirror价值镜。用户已回答了动态�
 
 ${SYSTEM_PROMPT}`;
 
+export type TokenUsage = {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  usageUnavailable?: boolean;
+};
+
 export type AnalyzeResult =
-  | { status: "complete"; result: HerStartAnalysis }
-  | { status: "needs_followup"; followup: FollowupQuestion };
+  | { status: "complete"; result: HerStartAnalysis; usage: TokenUsage }
+  | { status: "needs_followup"; followup: FollowupQuestion; usage: TokenUsage };
 
 type AIConfig = { apiKey: string; baseUrl: string; model: string };
 
@@ -84,53 +91,68 @@ export async function analyzeWithProvider(
 
   // 第二次调用：必须返回 complete
   if (followupUsed && options?.followupQ && options?.followupA) {
-    const result = await callAI(cfg, FINALIZE_PROMPT, analysisSchema, [
+    const { result, usage } = await callAI(cfg, FINALIZE_PROMPT, analysisSchema, [
       { role: "system", content: FINALIZE_PROMPT },
       { role: "user", content: buildFinalizeInput(answers, options.followupQ, options.followupA) },
     ]);
-    return { status: "complete", result };
+    return { status: "complete", result, usage };
   }
 
   // 第一次调用：先判断是否需要追问
-  const needsFollowup = await checkNeedsFollowup(cfg, answers);
-  if (needsFollowup) {
-    return { status: "needs_followup", followup: needsFollowup };
+  const { followup, usage: followupUsage } = await checkNeedsFollowup(cfg, answers);
+  if (followup) {
+    return { status: "needs_followup", followup, usage: followupUsage };
   }
 
   // 信息充分，直接生成
-  const result = await callAI(cfg, SYSTEM_PROMPT, analysisSchema, [
+  const { result, usage } = await callAI(cfg, SYSTEM_PROMPT, analysisSchema, [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: answers.map((a, i) => `回答${i + 1}：${a}`).join("\n") },
   ]);
-  return { status: "complete", result };
+  return { status: "complete", result, usage };
 }
 
-async function checkNeedsFollowup(cfg: AIConfig, answers: string[]): Promise<FollowupQuestion | null> {
+function extractUsage(payload: unknown): TokenUsage {
+  const obj = payload as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } };
+  if (obj?.usage) {
+    return {
+      promptTokens: obj.usage.prompt_tokens,
+      completionTokens: obj.usage.completion_tokens,
+      totalTokens: obj.usage.total_tokens,
+    };
+  }
+  return { usageUnavailable: true };
+}
+
+async function checkNeedsFollowup(cfg: AIConfig, answers: string[]): Promise<{ followup: FollowupQuestion | null; usage: TokenUsage }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
   try {
+    const body: Record<string, unknown> = {
+      model: cfg.model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      thinking: { type: "disabled" },
+      messages: [
+        { role: "system", content: FOLLOWUP_PROMPT },
+        { role: "user", content: answers.map((a, i) => `回答${i + 1}：${a}`).join("\n") },
+      ],
+    };
     const response = await fetch(`${cfg.baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${cfg.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: cfg.model,
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: FOLLOWUP_PROMPT },
-          { role: "user", content: answers.map((a, i) => `回答${i + 1}：${a}`).join("\n") },
-        ],
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
     if (!response.ok) throw new Error("AI_FOLLOWUP_FAILED");
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     const content = payload.choices?.[0]?.message?.content ?? "";
     const parsed = JSON.parse(content) as { status?: string; followup?: unknown };
+    const usage = extractUsage(payload);
     if (parsed.status === "needs_followup" && parsed.followup) {
-      return followupSchema.parse(parsed.followup);
+      return { followup: followupSchema.parse(parsed.followup), usage };
     }
-    return null;
+    return { followup: null, usage };
   } finally {
     clearTimeout(timer);
   }
@@ -141,24 +163,28 @@ async function callAI(
   _prompt: string,
   schema: typeof analysisSchema,
   messages: Array<{ role: string; content: string }>
-): Promise<HerStartAnalysis> {
+): Promise<{ result: HerStartAnalysis; usage: TokenUsage }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25_000);
   try {
+    const body: Record<string, unknown> = {
+      model: cfg.model,
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      thinking: { type: "disabled" },
+      messages,
+    };
     const response = await fetch(`${cfg.baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${cfg.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: cfg.model,
-        temperature: 0.3,
-        response_format: { type: "json_object" },
-        messages,
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
     if (!response.ok) throw new Error("AI_REQUEST_FAILED");
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    return schema.parse(JSON.parse(payload.choices?.[0]?.message?.content ?? ""));
+    const result = schema.parse(JSON.parse(payload.choices?.[0]?.message?.content ?? ""));
+    const usage = extractUsage(payload);
+    return { result, usage };
   } finally {
     clearTimeout(timer);
   }
