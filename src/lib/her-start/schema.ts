@@ -32,7 +32,7 @@ export const analysisSchema = z.object({
     problem: z.string(),
     productName: z.string(),
     delivery: z.string(),
-    testPrice: z.string(),
+    testPrice: z.union([z.string(), z.number()]).transform((v) => String(v)),
     paymentReason: z.string(),
     firstCustomers: z.string(),
     validationNote: z.string(),
@@ -40,7 +40,7 @@ export const analysisSchema = z.object({
   actionCard: z.object({
     actions: z.array(z.object({
       task: z.string(),
-      estimatedMinutes: z.number().int().min(1).max(30),
+      estimatedMinutes: z.union([z.number(), z.string()]).transform((v, ctx) => { const n = typeof v === "string" ? parseInt(v, 10) : v; if (isNaN(n) || n < 1 || n > 30) { ctx.addIssue({ code: "custom", message: "estimatedMinutes must be 1-30" }); return z.NEVER; } return n; }),
       completionCriteria: z.string(),
       realUserContact: z.boolean(),
     })).min(1).max(3).refine((items) => items.some((item) => item.realUserContact), "至少一项行动需要接触真实用户"),
