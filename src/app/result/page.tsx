@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useProgress, getLevel, getDisplayName } from "@/lib/her-start/use-progress";
+import { useProgress, getLevel, getDisplayName, loadProgress } from "@/lib/her-start/use-progress";
 import { BottomNav } from "@/components/her-start/bottom-nav";
 import { BadgeSeal } from "@/components/her-start/brand-icons";
 import { BrandReport } from "@/components/her-start/brand-report";
@@ -13,8 +13,14 @@ export default function ResultPage() {
   const { progress, update, loaded } = useProgress();
   const [showReport, setShowReport] = useState(false);
 
+  const [redirected, setRedirected] = useState(false);
+
   useEffect(() => {
-    if (loaded && !progress.result) {
+    if (!loaded || redirected) return;
+    // 直接从 localStorage 读取，不依赖 React state 闭包
+    const fresh = loadProgress();
+    if (!fresh.result) {
+      setRedirected(true);
       router.push("/");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

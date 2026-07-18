@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useProgress, saveProgress, getCachedResult, setCachedResult, clearAnalysisResult } from "@/lib/her-start/use-progress";
+import { useProgress, saveProgress, loadProgress, getCachedResult, setCachedResult, clearAnalysisResult } from "@/lib/her-start/use-progress";
 import { demoAnalysis } from "@/lib/her-start/demo";
 import type { HerStartAnalysis } from "@/lib/her-start/schema";
 
@@ -29,20 +29,25 @@ type PageState = "loading" | "error";
 
 export default function AnalyzingPage() {
   const router = useRouter();
-  const { progress, update, loaded } = useProgress();
+  const { loaded } = useProgress();
   const [line, setLine] = useState(0);
   const [pageState, setPageState] = useState<PageState>("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || startedRef.current) return;
+    startedRef.current = true;
+
+    // 直接从 localStorage 读取最新数据，不依赖 React state 闭包
+    const fresh = loadProgress();
 
     // 立即清除旧结果，防止闪现上一份报告
     clearAnalysisResult();
-    update({ result: null, mode: null, analysisId: null, demoReason: null });
 
-    if (!progress.answers.every((a) => a.trim().length > 0)) {
+    // 必须检查四问是否完整——如果空才跳回 interview
+    if (!fresh.answers.every((a) => a.trim().length > 0)) {
       router.push("/interview");
       return;
     }
@@ -59,10 +64,11 @@ export default function AnalyzingPage() {
     };
 
     async function doAnalyze() {
-      const fresh = saveProgress({});
-      const answers = fresh.answers;
-      const followupQuestion = fresh.followupQuestion;
-      const followupAnswer = fresh.followupAnswer;
+      // 再次从 localStorage 读取，确保最新
+      const current = loadProgress();
+      const answers = current.answers;
+      const followupQuestion = current.followupQuestion;
+      const followupAnswer = current.followupAnswer;
 
       // 检查本地缓存（仅 AI 个性化结果）
       const cached = getCachedResult(answers, followupQuestion ?? undefined, followupAnswer ?? undefined);
@@ -84,7 +90,8 @@ export default function AnalyzingPage() {
         requestId: crypto.randomUUID(),
       };
 
-      if (followupQuestion && followupAnswer) {
+      // 如果有追问和回答，带上 followupUsed=true
+      if (followupQuestion && followupAnswer && followupAnswer.trim().length > 0) {
         body.followup = { question: followupQuestion, answer: followupAnswer };
         body.followupUsed = true;
       }
@@ -102,9 +109,9 @@ export default function AnalyzingPage() {
         if (!res.ok) throw new Error(`HTTP_${res.status}`);
         const data = (await res.json()) as AnalyzeResponse;
 
-        // 如果请求被中止（用户已离开页面），不处理响应
         if (controller.signal.aborted) return;
 
+        // followupUsed=true 时，即使 AI 意外返回 needs_followup 也不跳回 interview
         if (data.status === "needs_followup" && !body.followupUsed) {
           saveProgress({ followupQuestion: data.followup?.question });
           router.push("/interview?followup=1");
@@ -117,6 +124,7 @@ export default function AnalyzingPage() {
             setCachedResult(answers, data.result, followupQuestion ?? undefined, followupAnswer ?? undefined);
           }
 
+          // 先写入 localStorage，确认保存后再跳转
           saveProgress({
             result: data.result,
             isDemo: data.mode === "demo",
@@ -127,8 +135,20 @@ export default function AnalyzingPage() {
             points: 100,
             createdAt: new Date().toISOString(),
           });
+
+          // 验证写入成功
+          const verify = loadProgress();
+          if (!verify.result) {
+            throw new Error("SAVE_FAILED");
+          }
+
           router.push("/result");
           return;
+        }
+
+        // followupUsed=true 但返回 needs_followup：不允许跳回 interview
+        if (data.status === "needs_followup" && body.followupUsed) {
+          throw new Error("AI_RETURNED_FOLLOWUP_AFTER_FOLLOWUPUSED");
         }
 
         throw new Error("UNKNOWN_STATUS");
@@ -137,8 +157,8 @@ export default function AnalyzingPage() {
 
         const isAbort = err instanceof Error && err.name === "AbortError";
         const reason = isAbort
-          ? "AI 分析超时，已为你展示演示结果。你可以稍后重试。"
-          : "Value Mirror 暂时没有完成分析。已为你展示演示结果，你可以重新尝试。";
+          ? "AI 分析超时，你的回答已经保存。可以重新尝试。"
+          : "Value Mirror 暂时没有完成分析，你的回答已经保存。可以重新尝试，或查看演示结果。";
 
         saveProgress({
           result: demoAnalysis,
@@ -161,7 +181,9 @@ export default function AnalyzingPage() {
     clearAnalysisResult();
     setPageState("loading");
     setErrorMsg("");
-    window.location.reload();
+    startedRef.current = false;
+    // 重新触发 effect
+    setTimeout(() => window.location.reload(), 100);
   }
 
   function viewDemo() {
@@ -188,9 +210,10 @@ export default function AnalyzingPage() {
       {pageState === "error" && (
         <div className="loading-error" role="alert">
           {errorMsg}
-          <div style={{ marginTop: "16px", display: "flex", gap: "10px", justifyContent: "center" }}>
-            <button className="btn btn-primary" onClick={retry}>重新尝试</button>
-            <button className="btn btn-secondary" onClick={viewDemo}>查看演示结果</button>
+          <div style={{ marginTop: "16px", display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
+            <button className="btn btn-primary" onClick={retry}>重新生成</button>
+            <button className="btn btn-secondary" onClick={() => router.push("/interview")}>返回修改</button>
+            <button className="btn btn-ghost" onClick={viewDemo}>查看演示结果</button>
           </div>
         </div>
       )}

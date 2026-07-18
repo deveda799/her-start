@@ -250,7 +250,7 @@ function InterviewContent() {
               onClick={submitFollowup}
               disabled={submitting}
             >
-              {submitting ? "正在照见你的人生资产……" : "完成回答，生成方案"}
+              {submitting ? "正在生成你的开局方案…" : "完成回答，生成方案"}
             </button>
           </div>
         </div>
@@ -385,7 +385,7 @@ function InterviewContent() {
             style={{ flex: 2 }}
           >
             {submitting
-              ? "正在照见你的人生资产……"
+              ? "正在生成你的开局方案…"
               : isLastStep
                 ? "完成照见，生成开局方案"
                 : "继续"}
