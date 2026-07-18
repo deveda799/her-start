@@ -31,3 +31,5 @@ her-start-main.zip
 *.log
 npm-debug.log*
 .vercel
+her-start-deploy.tar.gz
+*.tar.gz
