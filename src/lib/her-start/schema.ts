@@ -19,7 +19,7 @@ const assetSchema = z.object({
 });
 
 export const analysisSchema = z.object({
-  facts: z.array(z.string()).min(1).max(8),
+  facts: z.array(z.string()).min(1).max(12),
   lifeAssetCard: z.object({
     assets: z.array(assetSchema).length(3),
     coreTransferableAbility: z.string(),
