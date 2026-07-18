@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "@/app/api/analyze/route";
+import { _resetRateLimitForTests } from "@/lib/her-start/rate-limit";
 import { saveProgress, loadProgress, clearProgress } from "@/lib/her-start/use-progress";
 import { demoAnalysis } from "@/lib/her-start/demo";
 
@@ -17,15 +18,29 @@ vi.stubGlobal("window", { localStorage: localStorageMock });
 vi.stubGlobal("localStorage", localStorageMock);
 vi.stubGlobal("crypto", { randomUUID: () => "test-uuid-" + Math.random().toString(36).slice(2, 10) });
 
-beforeEach(() => { localStorageMock.clear(); });
-afterEach(() => { vi.unstubAllEnvs(); localStorageMock.clear(); });
+beforeEach(() => {
+  localStorageMock.clear();
+  _resetRateLimitForTests();
+});
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+  localStorageMock.clear();
+  _resetRateLimitForTests();
+});
+
+// 真实业务级 fixture：每个回答足够详细，符合真实用户输入
 const VALID_ANSWERS = [
-  "我有十年互联网医疗运营经验，做过医生资源拓展和团队培训。",
-  "同事经常找我梳理副业方向，上个月帮朋友拆解知识付费项目。",
-  "我愿意长期研究女性职业转型和经验产品化，因为我自己经历过。",
-  "每周可投入六小时，希望线上、不出镜、从轻量一对一开始。",
+  "我有十年互联网医疗运营经验，做过医生资源拓展、项目运营和团队培训。擅长把复杂经验整理成可复用的SOP，也经历过一次从大厂到创业的职业转型。",
+  "同事经常找我梳理副业方向和AI实践方法。上个月有位做知识付费的朋友找我，她不知道怎么把自己积累的育儿经验做成产品，我帮她拆解了从内容到交付的全流程。",
+  "我愿意长期研究女性职业转型和经验产品化，因为我自己经历过从职场到家庭的转变，深知很多女性有能力但不知道怎么变现。这件事即使暂时没有收入我也愿意持续投入。",
+  "每周可投入6-8小时，希望线上为主、不愿意出镜、从一对一轻量服务开始。第一阶段希望验证500-1000元的付费意愿，同时兼顾家庭。",
 ];
+
+// 真实级动态追问回答（有具体案例细节）
+const REAL_FOLLOWUP_ANSWER = "上个月同事小张找我帮她拆解一个知识付费项目，她有三年的母婴内容积累但不知道怎么定价和设计交付流程，我帮她从用户需求倒推产品设计，最终她以699元的价格完成了首次售卖。";
+
+const REAL_FOLLOWUP_QUESTION = "你提到经常帮别人梳理副业方向，最近一次是谁找你？她具体卡在哪里？";
 
 describe("Her Start end-to-end user journey", () => {
   it("A: four questions -> needs_followup -> followup answer -> complete result", async () => {
@@ -39,7 +54,7 @@ describe("Her Start end-to-end user journey", () => {
 
     const req1 = new NextRequest("http://localhost/api/analyze", {
       method: "POST",
-      body: JSON.stringify({ answers: VALID_ANSWERS, requestId: "req-0001" }),
+      body: JSON.stringify({ answers: VALID_ANSWERS, requestId: "req-journey-0001" }),
       headers: { "Content-Type": "application/json" },
     });
     const res1 = await POST(req1);
@@ -49,19 +64,19 @@ describe("Her Start end-to-end user journey", () => {
     expect(body1.status).toBe("needs_followup");
     expect(body1.followup.question).toBeTruthy();
     expect(body1.followup.question.length).toBeLessThanOrEqual(80);
+    expect(body1.followup.missingReason).toBeTruthy();
     expect(body1.demo).toBe(true);
 
     saveProgress({ followupQuestion: body1.followup.question });
-    const followupAnswer = "上个月同事小张找我帮她拆解知识付费项目，她不知道怎么把课程卖出去。";
-    saveProgress({ followupAnswer });
+    saveProgress({ followupAnswer: REAL_FOLLOWUP_ANSWER });
 
     const req2 = new NextRequest("http://localhost/api/analyze", {
       method: "POST",
       body: JSON.stringify({
         answers: VALID_ANSWERS,
-        followup: { question: body1.followup.question, answer: followupAnswer },
+        followup: { question: body1.followup.question, answer: REAL_FOLLOWUP_ANSWER },
         followupUsed: true,
-        requestId: "req-0002",
+        requestId: "req-journey-0002",
       }),
       headers: { "Content-Type": "application/json" },
     });
@@ -72,7 +87,9 @@ describe("Her Start end-to-end user journey", () => {
     expect(body2.status).toBe("complete");
     expect(body2.demo).toBe(true);
     expect(body2.result.lifeAssetCard.assets).toHaveLength(3);
+    expect(body2.result.lifeAssetCard.valuePositioning).toBeTruthy();
     expect(body2.result.minimumProductCard.productName).toBeTruthy();
+    expect(body2.result.minimumProductCard.testPrice).toBeTruthy();
     expect(body2.result.actionCard.actions.some((a: { realUserContact: boolean }) => a.realUserContact)).toBe(true);
     expect(body2.result.closing).toContain("你不是缺少价值");
 
@@ -97,9 +114,9 @@ describe("Her Start end-to-end user journey", () => {
       method: "POST",
       body: JSON.stringify({
         answers: VALID_ANSWERS,
-        followup: { question: "你提到经常帮别人，最近一次是谁？", answer: "上个月同事找我帮她拆解项目。" },
+        followup: { question: REAL_FOLLOWUP_QUESTION, answer: REAL_FOLLOWUP_ANSWER },
         followupUsed: true,
-        requestId: "req-0003",
+        requestId: "req-journey-0003",
       }),
       headers: { "Content-Type": "application/json" },
     });
@@ -113,7 +130,7 @@ describe("Her Start end-to-end user journey", () => {
   it("validates: empty answers return 400 error", async () => {
     const req = new NextRequest("http://localhost/api/analyze", {
       method: "POST",
-      body: JSON.stringify({ answers: ["", "test", "test", "test"], requestId: "req-0004" }),
+      body: JSON.stringify({ answers: ["", "测试", "测试", "测试"], requestId: "req-journey-0004" }),
       headers: { "Content-Type": "application/json" },
     });
     const res = await POST(req);
@@ -126,7 +143,17 @@ describe("Her Start end-to-end user journey", () => {
     const longAnswer = "a".repeat(501);
     const req = new NextRequest("http://localhost/api/analyze", {
       method: "POST",
-      body: JSON.stringify({ answers: [longAnswer, "b", "c", "d"], requestId: "req-0005" }),
+      body: JSON.stringify({ answers: [longAnswer, "b", "c", "d"], requestId: "req-journey-0005" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("validates: requestId too short returns 400", async () => {
+    const req = new NextRequest("http://localhost/api/analyze", {
+      method: "POST",
+      body: JSON.stringify({ answers: VALID_ANSWERS, requestId: "short" }),
       headers: { "Content-Type": "application/json" },
     });
     const res = await POST(req);
@@ -168,9 +195,9 @@ describe("Her Start end-to-end user journey", () => {
       method: "POST",
       body: JSON.stringify({
         answers: VALID_ANSWERS,
-        followup: { question: "你提到经常帮别人，最近一次是谁？", answer: "上个月同事找我帮她拆解项目。" },
+        followup: { question: REAL_FOLLOWUP_QUESTION, answer: REAL_FOLLOWUP_ANSWER },
         followupUsed: true,
-        requestId: "req-0006",
+        requestId: "req-journey-0006",
       }),
       headers: { "Content-Type": "application/json" },
     });
@@ -186,5 +213,35 @@ describe("Her Start end-to-end user journey", () => {
     const restored = loadProgress();
     expect(restored.answers).toEqual(["", "", "", ""]);
     expect(restored.points).toBe(0);
+  });
+
+  it("rate limit: hitting IP hourly limit returns demo complete", async () => {
+    vi.stubEnv("AI_API_KEY", "");
+    vi.stubEnv("AI_BASE_URL", "");
+    vi.stubEnv("AI_MODEL", "");
+    vi.stubEnv("IP_HOURLY_AI_LIMIT", "1");
+
+    // First call: succeeds (returns needs_followup in demo mode)
+    const req1 = new NextRequest("http://localhost/api/analyze", {
+      method: "POST",
+      body: JSON.stringify({ answers: VALID_ANSWERS, requestId: "req-journey-0007" }),
+      headers: { "Content-Type": "application/json", "x-forwarded-for": "1.2.3.4" },
+    });
+    const res1 = await POST(req1);
+    const body1 = await res1.json();
+    expect(res1.status).toBe(200);
+
+    // Second call from same IP: should hit limit, return demo complete
+    const req2 = new NextRequest("http://localhost/api/analyze", {
+      method: "POST",
+      body: JSON.stringify({ answers: VALID_ANSWERS, requestId: "req-journey-0008" }),
+      headers: { "Content-Type": "application/json", "x-forwarded-for": "1.2.3.4" },
+    });
+    const res2 = await POST(req2);
+    const body2 = await res2.json();
+    expect(res2.status).toBe(200);
+    expect(body2.status).toBe("complete");
+    expect(body2.demo).toBe(true);
+    expect(body2.message).toBeTruthy();
   });
 });
