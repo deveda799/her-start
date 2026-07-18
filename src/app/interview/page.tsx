@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useProgress, getStage } from "@/lib/her-start/use-progress";
+import { useProgress, getStage, saveProgress } from "@/lib/her-start/use-progress";
 
 const QUESTIONS = [
   {
@@ -52,6 +52,7 @@ function InterviewContent() {
   const [followupAnswer, setFollowupAnswer] = useState("");
   const [error, setError] = useState("");
   const [chips, setChips] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatBodyRef = useRef<HTMLDivElement>(null);
 
@@ -92,15 +93,10 @@ function InterviewContent() {
 
   const totalChars = progress.answers.reduce((s, a) => s + a.length, 0) - (progress.answers[step]?.length ?? 0) + answer.length;
 
-  function saveAnswer() {
-    const next = [...progress.answers];
-    next[step] = answer;
-    update({ answers: next, step });
-  }
-
   function next() {
+    if (submitting) return;
     if (!answer.trim()) {
-      setError("写下一点真实经历，价值镜才能继续帮你梳理。");
+      setError("还差一点，请补充完成当前问题后再生成开局方案。");
       textareaRef.current?.focus();
       return;
     }
@@ -109,21 +105,33 @@ function InterviewContent() {
       return;
     }
     setError("");
-    saveAnswer();
+
+    // 同步写入 localStorage（确保 /analyzing 页面能读到最新数据）
+    const nextAnswers = [...progress.answers];
+    nextAnswers[step] = answer;
+    saveProgress({ answers: nextAnswers, step });
+
     if (step < 3) {
       setStep(step + 1);
     } else {
+      // 四问完成，进入分析流程
+      setSubmitting(true);
+      update({ answers: nextAnswers, step });
       router.push("/analyzing");
     }
   }
 
   function prev() {
+    if (submitting) return;
     if (step === 0) return;
-    saveAnswer();
+    const nextAnswers = [...progress.answers];
+    nextAnswers[step] = answer;
+    saveProgress({ answers: nextAnswers, step });
     setStep(step - 1);
   }
 
   function submitFollowup() {
+    if (submitting) return;
     if (!followupAnswer.trim()) {
       setError("请回答这个关键问题，价值镜才能更准确地为你生成方案。");
       return;
@@ -133,11 +141,14 @@ function InterviewContent() {
       return;
     }
     setError("");
+    setSubmitting(true);
+    saveProgress({ followupAnswer });
     update({ followupAnswer });
     router.push("/analyzing");
   }
 
   function toggleChip(label: string) {
+    if (submitting) return;
     if (chips.includes(label)) {
       setChips(chips.filter((c) => c !== label));
     } else {
@@ -198,8 +209,12 @@ function InterviewContent() {
             <span>{followupAnswer.length} / {MAX_PER}</span>
           </div>
           <div className="chat-actions">
-            <button className="btn btn-primary btn-full" onClick={submitFollowup}>
-              完成回答，生成方案
+            <button
+              className="btn btn-primary btn-full"
+              onClick={submitFollowup}
+              disabled={submitting}
+            >
+              {submitting ? "正在照见你的人生资产……" : "完成回答，生成方案"}
             </button>
           </div>
         </div>
@@ -210,6 +225,7 @@ function InterviewContent() {
   // ===== 标准四问模式 =====
   const q = QUESTIONS[step];
   const progressPercent = ((step + 1) / 4) * 100;
+  const isLastStep = step === 3;
 
   return (
     <div className="chat-page">
@@ -246,7 +262,7 @@ function InterviewContent() {
           onChange={(e) => { setAnswer(e.target.value); setError(""); }}
           aria-label={q.title}
         />
-        {step === 3 && (
+        {isLastStep && (
           <div className="option-chips">
             {Q4_OPTIONS.map((label) => (
               <button
@@ -254,12 +270,13 @@ function InterviewContent() {
                 type="button"
                 className={`option-chip${chips.includes(label) ? " selected" : ""}`}
                 onClick={() => toggleChip(label)}
+                disabled={submitting}
               >
                 {label}
               </button>
             ))}
             {chips.length > 0 && (
-              <button type="button" className="option-chip selected" onClick={appendChips}>
+              <button type="button" className="option-chip selected" onClick={appendChips} disabled={submitting}>
                 加入回答
               </button>
             )}
@@ -270,11 +287,20 @@ function InterviewContent() {
           <span>{answer.length} / {MAX_PER} · 共 {totalChars} / {MAX_TOTAL}</span>
         </div>
         <div className="chat-actions">
-          <button className="btn btn-secondary" onClick={prev} disabled={step === 0} style={{ flex: 1 }}>
+          <button className="btn btn-secondary" onClick={prev} disabled={step === 0 || submitting} style={{ flex: 1 }}>
             上一步
           </button>
-          <button className="btn btn-primary" onClick={next} style={{ flex: 2 }}>
-            {step === 3 ? "完成照见，生成开局方案" : "继续"}
+          <button
+            className="btn btn-primary"
+            onClick={next}
+            disabled={submitting}
+            style={{ flex: 2 }}
+          >
+            {submitting
+              ? "正在照见你的人生资产……"
+              : isLastStep
+                ? "完成照见，生成开局方案"
+                : "继续"}
           </button>
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useProgress } from "@/lib/her-start/use-progress";
+import { useProgress, saveProgress } from "@/lib/her-start/use-progress";
 import { demoAnalysis } from "@/lib/her-start/demo";
 import type { HerStartAnalysis } from "@/lib/her-start/schema";
 
@@ -14,16 +14,23 @@ const LOADING_LINES = [
 ];
 
 type AnalyzeResponse =
-  | { status: "complete"; result: HerStartAnalysis; demo?: boolean }
+  | { status: "complete"; result: HerStartAnalysis; demo?: boolean; message?: string }
   | { status: "needs_followup"; followup: { question: string; missingReason: string }; demo?: boolean };
+
+type PageState = "loading" | "error" | "redirecting";
 
 export default function AnalyzingPage() {
   const router = useRouter();
-  const { progress, update } = useProgress();
+  const { progress, update, loaded } = useProgress();
   const [line, setLine] = useState(0);
-  const [error, setError] = useState("");
+  const [pageState, setPageState] = useState<PageState>("loading");
+  const [errorMsg, setErrorMsg] = useState("");
 
+  // 只在 loaded 后执行一次分析
   useEffect(() => {
+    if (!loaded) return;
+
+    // 校验：四问必须全部有内容
     if (!progress.answers.every((a) => a.trim().length > 0)) {
       router.push("/interview");
       return;
@@ -35,22 +42,22 @@ export default function AnalyzingPage() {
     return () => clearInterval(timer);
 
     async function doAnalyze() {
-      // 已有 followup 问句但用户还没回答，不重复请求
-      if (progress.followupQuestion && !progress.followupAnswer) {
-        router.push("/interview?followup=1");
-        return;
-      }
+      // 读取最新的 localStorage（避免 closure capture 问题）
+      const fresh = saveProgress({});
+      const answers = fresh.answers;
+      const followupQuestion = fresh.followupQuestion;
+      const followupAnswer = fresh.followupAnswer;
 
       const body: Record<string, unknown> = {
-        answers: progress.answers,
+        answers,
         requestId: crypto.randomUUID(),
       };
 
       // 如果已有追问和回答，带上 followupUsed=true
-      if (progress.followupQuestion && progress.followupAnswer) {
+      if (followupQuestion && followupAnswer) {
         body.followup = {
-          question: progress.followupQuestion,
-          answer: progress.followupAnswer,
+          question: followupQuestion,
+          answer: followupAnswer,
         };
         body.followupUsed = true;
       }
@@ -66,44 +73,71 @@ export default function AnalyzingPage() {
         });
         clearTimeout(timeout);
 
-        if (!res.ok) throw new Error("分析请求失败");
+        if (!res.ok) {
+          throw new Error(`HTTP_${res.status}`);
+        }
         const data = (await res.json()) as AnalyzeResponse;
 
         if (data.status === "needs_followup" && !body.followupUsed) {
           // 需要追问，保存追问问题，跳回聊天页
-          update({
-            followupQuestion: data.followup.question,
-          });
+          saveProgress({ followupQuestion: data.followup.question });
+          setPageState("redirecting");
           router.push("/interview?followup=1");
           return;
         }
 
         if (data.status === "complete") {
-          update({
+          saveProgress({
             result: data.result,
             isDemo: Boolean(data.demo),
             points: 100,
             createdAt: new Date().toISOString(),
           });
+          if (data.message) {
+            // 限流提示，但仍展示结果
+          }
+          setPageState("redirecting");
           router.push("/result");
           return;
         }
 
-        throw new Error("分析返回格式异常");
-      } catch {
+        throw new Error("UNKNOWN_STATUS");
+      } catch (err) {
         // 失败兜底：使用演示数据
-        update({
+        const isAbort = err instanceof Error && err.name === "AbortError";
+        const reason = isAbort
+          ? "AI 分析超时，已为你展示演示结果。你可以稍后重试。"
+          : "Value Mirror 暂时没有完成分析。已为你展示演示结果，你可以重新尝试。";
+
+        saveProgress({
           result: demoAnalysis,
           isDemo: true,
           points: 100,
           createdAt: new Date().toISOString(),
         });
-        setError("AI 分析暂时不可用，已为你展示演示结果。你可以稍后重试。");
-        setTimeout(() => router.push("/result"), 2000);
+        setErrorMsg(reason);
+        setPageState("error");
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loaded]);
+
+  function retry() {
+    setPageState("loading");
+    setErrorMsg("");
+    // 重新触发分析
+    window.location.reload();
+  }
+
+  function viewDemo() {
+    saveProgress({
+      result: demoAnalysis,
+      isDemo: true,
+      points: 100,
+      createdAt: new Date().toISOString(),
+    });
+    router.push("/result");
+  }
 
   return (
     <div className="loading-page">
@@ -113,8 +147,14 @@ export default function AnalyzingPage() {
       <p className="loading-line" aria-live="polite">{LOADING_LINES[line]}</p>
       <div className="loading-bar"><span /></div>
       <p className="loading-note">这通常需要 10—30 秒，请不要关闭页面</p>
-      {error && (
-        <div className="loading-error" role="alert">{error}</div>
+      {pageState === "error" && (
+        <div className="loading-error" role="alert">
+          {errorMsg}
+          <div style={{ marginTop: "16px", display: "flex", gap: "10px", justifyContent: "center" }}>
+            <button className="btn btn-primary" onClick={retry}>重新尝试</button>
+            <button className="btn btn-secondary" onClick={viewDemo}>查看演示结果</button>
+          </div>
+        </div>
       )}
     </div>
   );
