@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useProgress, getLevel, getStage } from "@/lib/her-start/use-progress";
+import { useProgress, getLevel, getStage, BUILD_VERSION } from "@/lib/her-start/use-progress";
 import { BottomNav } from "@/components/her-start/bottom-nav";
 import { BadgeSeal } from "@/components/her-start/brand-icons";
 import { BrandReport } from "@/components/her-start/brand-report";
@@ -133,6 +133,17 @@ export default function MePage() {
             分享开局成果
           </button>
           <button className="btn btn-ghost btn-full" onClick={reanalyze}>重新分析</button>
+          <button className="btn btn-ghost btn-full" onClick={() => {
+            if (confirm("确定要重置本次体验吗？这将清除你的所有回答和报告，但不影响浏览器其他数据。")) {
+              reset();
+              window.location.href = "/";
+            }
+          }}>重置本次体验</button>
+        </div>
+
+        {/* 版本号 */}
+        <div style={{ textAlign: "center", padding: "16px 20px 24px", fontSize: "12px", color: "var(--text-sub)" }}>
+          Build {BUILD_VERSION}
         </div>
       </main>
       <BottomNav />
