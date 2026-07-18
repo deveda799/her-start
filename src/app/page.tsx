@@ -52,13 +52,13 @@ export default function HomePage() {
           <div className="task-eyebrow">当前开局任务</div>
           <div className="task-title">第一关 · 看见自己</div>
           <p className="task-desc">完成4个问题，让 Value Mirror 从你的经历中找到3项核心人生资产。</p>
-          {stage === "not-started" && (
+          {stage === "idle" && (
             <Link href="/interview" className="btn btn-primary btn-full">进入第一关</Link>
           )}
           {stage === "interviewing" && (
             <Link href="/interview" className="btn btn-primary btn-full">继续开局</Link>
           )}
-          {(stage === "followup" || stage === "analyzing") && (
+          {stage === "needs_followup" && !completed && (
             <Link href="/interview" className="btn btn-primary btn-full">继续完成分析</Link>
           )}
           {completed && (

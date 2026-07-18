@@ -10,10 +10,11 @@ import { BrandReport } from "@/components/her-start/brand-report";
 
 export default function ResultPage() {
   const router = useRouter();
-  const { progress, update, loaded } = useProgress();
+  const { progress, update, loaded, refresh } = useProgress();
   const [showReport, setShowReport] = useState(false);
 
   const [redirected, setRedirected] = useState(false);
+  const [hasResult, setHasResult] = useState(false);
 
   useEffect(() => {
     if (!loaded || redirected) return;
@@ -22,11 +23,14 @@ export default function ResultPage() {
     if (!fresh.result) {
       setRedirected(true);
       router.push("/");
+    } else {
+      setHasResult(true);
+      refresh(); // 同步 React state
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
 
-  if (!loaded || !progress.result) {
+  if (!loaded || !hasResult || !progress.result) {
     return (
       <div className="app-shell">
         <div style={{ padding: "120px 20px", textAlign: "center", color: "var(--text-sub)" }}>加载中…</div>

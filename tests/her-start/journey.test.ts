@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "@/app/api/analyze/route";
 import { _resetRateLimitForTests } from "@/lib/her-start/rate-limit";
-import { saveProgress, loadProgress, clearProgress, computeCacheKey } from "@/lib/her-start/use-progress";
+import { saveProgress, loadProgress, resetAllProgress, computeCacheKey } from "@/lib/her-start/use-progress";
 import { demoAnalysis } from "@/lib/her-start/demo";
 
 const store: Record<string, string> = {};
@@ -159,9 +159,9 @@ describe("Her Start end-to-end user journey", () => {
     expect(restored.analysisId).toBe("test-123");
   });
 
-  it("clearProgress resets state", () => {
+  it("resetAllProgress resets state", () => {
     saveProgress({ answers: USER_A_ANSWERS, step: 3, points: 100 });
-    clearProgress();
+    resetAllProgress();
     const restored = loadProgress();
     expect(restored.answers).toEqual(["", "", "", ""]);
     expect(restored.points).toBe(0);

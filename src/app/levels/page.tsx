@@ -16,9 +16,9 @@ export default function LevelsPage() {
     );
   }
 
-  const lvl1Done = stage === "completed" || stage === "followup" || stage === "analyzing";
+  const lvl1Done = stage === "completed" || stage === "needs_followup";
   const lvl1Active = stage === "interviewing";
-  const lvl2Unlocked = lvl1Done;
+  const lvl2Unlocked = stage === "completed" || stage === "needs_followup";
   const lvl3Unlocked = stage === "completed";
 
   return (
@@ -44,7 +44,7 @@ export default function LevelsPage() {
             <span className="reward-tag">+20 经验值</span>
             <span className="reward-tag">人生资产卡</span>
           </div>
-          {stage === "not-started" && (
+          {stage === "idle" && (
             <Link href="/interview" className="btn btn-primary btn-full">开始关卡</Link>
           )}
           {lvl1Active && (

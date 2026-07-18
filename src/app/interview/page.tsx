@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useProgress, getStage, saveProgress } from "@/lib/her-start/use-progress";
+import { useProgress, getStage, saveProgress, BUILD_VERSION } from "@/lib/her-start/use-progress";
 
 const QUESTIONS = [
   {
@@ -178,8 +178,18 @@ function InterviewContent() {
     }
     setError("");
     setSubmitting(true);
-    saveProgress({ followupAnswer });
-    update({ followupAnswer });
+    // 同步写入 localStorage，不依赖 React 异步 setState
+    saveProgress({ followupAnswer, followupUsed: true });
+    update({ followupAnswer, followupUsed: true });
+    router.push("/analyzing");
+  }
+
+  function skipFollowup() {
+    if (submitting) return;
+    setSubmitting(true);
+    // 跳过追问，直接基于四问生成
+    saveProgress({ followupAnswer: null, followupUsed: false });
+    update({ followupAnswer: null, followupUsed: false });
     router.push("/analyzing");
   }
 
@@ -251,6 +261,14 @@ function InterviewContent() {
               disabled={submitting}
             >
               {submitting ? "正在生成你的开局方案…" : "完成回答，生成方案"}
+            </button>
+            <button
+              className="btn btn-ghost btn-full"
+              onClick={skipFollowup}
+              disabled={submitting}
+              style={{ marginTop: "8px" }}
+            >
+              跳过追问，直接生成
             </button>
           </div>
         </div>
