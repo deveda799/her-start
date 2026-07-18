@@ -30,3 +30,4 @@ her-start-main.zip
 # logs
 *.log
 npm-debug.log*
+.vercel
