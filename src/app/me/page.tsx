@@ -143,7 +143,7 @@ export default function MePage() {
 
         {/* 版本号 */}
         <div style={{ textAlign: "center", padding: "16px 20px 24px", fontSize: "12px", color: "var(--text-sub)" }}>
-          Build {BUILD_VERSION}
+          Build {BUILD_VERSION} · 部署节点：{process.env.NEXT_PUBLIC_DEPLOY_TARGET || "unknown"}
         </div>
       </main>
       <BottomNav />
