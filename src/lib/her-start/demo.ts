@@ -1,4 +1,9 @@
-import type { HerStartAnalysis } from "./schema";
+import type { HerStartAnalysis, FollowupQuestion } from "./schema";
+
+export const demoFollowup: FollowupQuestion = {
+  question: "你提到经常帮别人梳理副业方向，最近一次是谁找你？她具体卡在哪里？",
+  missingReason: "缺少一个真实的案例细节，无法判断她解决的具体问题类型。",
+};
 
 export const demoAnalysis: HerStartAnalysis = {
   facts: ["拥有10年以上互联网医疗运营经验", "擅长把复杂经验整理成SOP", "希望线上、低成本开始并兼顾家庭"],
