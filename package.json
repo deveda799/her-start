@@ -1,0 +1,41 @@
+{
+  "name": "jenny-career-intelligence",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run --configLoader runner",
+    "test:watch": "vitest --configLoader runner",
+    "typecheck": "tsc --noEmit",
+    "collect:dry": "tsx scripts/collect.ts --dry-run",
+    "collect": "tsx scripts/collect.ts",
+    "daily-report": "tsx scripts/daily-report.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.50.0",
+    "cheerio": "^1.1.0",
+    "dotenv": "^17.0.0",
+    "next": "^15.3.0",
+    "openai": "^5.8.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "rss-parser": "^3.13.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "autoprefixer": "^10.4.0",
+    "jsdom": "^26.1.0",
+    "postcss": "^8.5.0",
+    "tailwindcss": "^3.4.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

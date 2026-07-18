@@ -1,0 +1,42 @@
+{
+  "sources": [
+    {
+      "id": "example-rss",
+      "name": "示例 RSS",
+      "type": "rss",
+      "url": "https://example.com/feed.xml",
+      "enabled": false
+    },
+    {
+      "id": "example-web",
+      "name": "示例公开网页",
+      "type": "web",
+      "url": "https://example.com/career-story",
+      "enabled": false
+    },
+    {
+      "id": "example-manual",
+      "name": "手动链接示例",
+      "type": "manual",
+      "enabled": false,
+      "items": [
+        {
+          "title": "示例：远程顾问机会",
+          "url": "https://example.com/opportunity",
+          "summary": "请替换为真实的白名单公开链接。"
+        }
+      ]
+    },
+    {
+      "id": "example-search",
+      "name": "Brave Search 示例",
+      "type": "search",
+      "provider": "brave",
+      "keywords": [
+        "35+ 女性 灵活就业",
+        "宝妈 AI 副业案例"
+      ],
+      "enabled": false
+    }
+  ]
+}

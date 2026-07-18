@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#F8F4EC"/>
+  <rect x="72" y="72" width="1056" height="486" rx="42" fill="#FFFDF8" stroke="#DEDBD0" stroke-width="2"/>
+  <circle cx="178" cy="176" r="52" fill="#1D5B49"/>
+  <text x="178" y="196" text-anchor="middle" font-size="58" font-family="serif" fill="#FFFDF8">她</text>
+  <text x="260" y="170" font-size="36" font-family="Arial, sans-serif" fill="#1D5B49" font-weight="700">Her Start</text>
+  <text x="260" y="224" font-size="30" font-family="Arial, sans-serif" fill="#66736D">女性人生资产发现与商业化 AI 陪练</text>
+  <text x="120" y="360" font-size="76" font-family="serif" fill="#113D32">她来开局</text>
+  <text x="120" y="430" font-size="34" font-family="Arial, sans-serif" fill="#20332D">看见人生资产，生成第一个最小产品，开启24小时真实验证。</text>
+  <path d="M120 500h240" stroke="#A77B2E" stroke-width="8" stroke-linecap="round"/>
+</svg>
