@@ -37,8 +37,12 @@ export async function POST(request: NextRequest) {
     const model = process.env.AI_MODEL || "unknown";
 
     try {
+      // 比赛版：ENABLE_AI_FOLLOWUP=false 时关闭动态追问，直接生成完整结果
+      const enableFollowup = process.env.ENABLE_AI_FOLLOWUP !== "false";
+      const effectiveFollowupUsed = !enableFollowup || Boolean(input.followupUsed);
+
       const result = await analyzeWithProvider(input.answers, {
-        followupUsed: Boolean(input.followupUsed),
+        followupUsed: effectiveFollowupUsed,
         followupQ: input.followup?.question,
         followupA: input.followup?.answer,
       });
