@@ -2,14 +2,15 @@ import type { HerStartAnalysis } from "@/lib/her-start/schema";
 import { demoAnalysis } from "@/lib/her-start/demo";
 import { useEffect, useState, useCallback } from "react";
 
-export const BUILD_VERSION = "20260718-2301";
-export const PROGRESS_VERSION = "v3";
-export const SCHEMA_VERSION = "v3";
+export const BUILD_VERSION = "20260719-2200";
+export const PROGRESS_VERSION = "v4";
+export const SCHEMA_VERSION = "v4";
 export const PROMPT_VERSION = "v2";
 
-const STORAGE_KEY = "her-start-progress-v3";
-const RESULT_KEY = "her-start-result-v3";
-const CACHE_PREFIX = "her-start-cache-v3-";
+const STORAGE_KEY = "her-start:v4:progress";
+const RESULT_KEY = "her-start:v4:result";
+const CACHE_PREFIX = "her-start:v4:cache-";
+const OLD_KEY_PATTERNS = ["her-start-progress", "her-start-result", "her-start-cache", "her-start:v3:", "her-start:v2:", "her-start-v"];
 
 export type AnalysisMode = "ai" | "demo";
 export type DemoReason = "missing_config" | "provider_error" | "timeout" | "schema_invalid" | "rate_limit" | "global_limit" | "network_error" | "empty_content" | "parse_error";
@@ -58,25 +59,55 @@ function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof localStorage !== "undefined";
 }
 
-/** 从 localStorage 读取最新进度（不依赖 React state） */
+/** 清除所有 Her Start 相关旧版数据 */
+export function purgeAllHerStartData() {
+  if (!isBrowser()) return;
+  try {
+    // 清除当前版本
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(RESULT_KEY);
+    // 清除缓存
+    const keys = Object.keys(localStorage);
+    for (const k of keys) {
+      if (k.startsWith(CACHE_PREFIX)) localStorage.removeItem(k);
+      // 清除旧版 key
+      for (const pattern of OLD_KEY_PATTERNS) {
+        if (k.startsWith(pattern) || k === pattern) localStorage.removeItem(k);
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+/** 从 localStorage 读取最新进度 */
 export function loadProgress(): ProgressData {
   if (!isBrowser()) return { ...EMPTY };
   try {
+    // 先检查是否有旧版数据需要清除
+    const keys = Object.keys(localStorage);
+    let hasOldData = false;
+    for (const k of keys) {
+      for (const pattern of OLD_KEY_PATTERNS) {
+        if (k.startsWith(pattern) || k === pattern) {
+          hasOldData = true;
+          break;
+        }
+      }
+      if (hasOldData) break;
+    }
+    if (hasOldData) {
+      // 旧版数据：不迁移，直接清除
+      purgeAllHerStartData();
+      return { ...EMPTY };
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...EMPTY };
 
     const saved = JSON.parse(raw) as Partial<ProgressData>;
-
-    // 版本检查：旧版本数据尝试迁移
+    // 版本不一致：清除，不迁移
     if (saved.version && saved.version !== PROGRESS_VERSION) {
-      const migrated: ProgressData = {
-        ...EMPTY,
-        displayName: typeof saved.displayName === "string" ? saved.displayName : "",
-        answers: Array.isArray(saved.answers) && saved.answers.length === 4 ? saved.answers : ["", "", "", ""],
-        showNameInReport: saved.showNameInReport !== false,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      return migrated;
+      purgeAllHerStartData();
+      return { ...EMPTY };
     }
 
     return {
@@ -90,7 +121,7 @@ export function loadProgress(): ProgressData {
   }
 }
 
-/** 同步写入 localStorage（不依赖 React state） */
+/** 同步写入 localStorage */
 export function saveProgress(patch: Partial<ProgressData>): ProgressData {
   if (!isBrowser()) return { ...EMPTY };
   try {
@@ -120,18 +151,10 @@ export function clearAnalysisResult(): ProgressData {
   return cleared;
 }
 
-/** 完全重置（仅 Her Start 相关数据） */
+/** 完全重置 */
 export function resetAllProgress(): ProgressData {
   if (!isBrowser()) return { ...EMPTY };
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(RESULT_KEY);
-    const keys = Object.keys(localStorage).filter((k) => k.startsWith(CACHE_PREFIX));
-    for (const k of keys) localStorage.removeItem(k);
-    // 清除旧版本数据
-    localStorage.removeItem("her-start-v2");
-    localStorage.removeItem("her-start-result-v2");
-  } catch { /* ignore */ }
+  purgeAllHerStartData();
   return { ...EMPTY };
 }
 
@@ -221,7 +244,6 @@ export function getLevel(points: number): Level {
   return [...LEVELS].reverse().find((l) => points >= l.minPoints) ?? LEVELS[0];
 }
 
-/** 生成简短 analysisId（用户可见） */
 export function makeShortAnalysisId(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let id = "HS-";
@@ -236,6 +258,16 @@ export function useProgress() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    // 检查 ?reset=1 参数
+    if (isBrowser()) {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("reset") === "1") {
+        purgeAllHerStartData();
+        // 清除 URL 参数
+        url.searchParams.delete("reset");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
     setProgress(loadProgress());
     setLoaded(true);
   }, []);

@@ -310,6 +310,7 @@ function InterviewContent() {
             placeholder="例如：玉琴、小林、Jenny（留空则显示「你」）"
             onChange={(e) => { setNameInput(e.target.value); setError(""); }}
             aria-label="称呼"
+            autoComplete="off"
           />
           <div className="chat-meta">
             <span className={error ? "chat-meta-error" : ""} role="alert">{error}</span>
@@ -365,6 +366,7 @@ function InterviewContent() {
           value={answer}
           maxLength={MAX_PER}
           placeholder={q.placeholder}
+          autoComplete="off"
           onChange={(e) => { setAnswer(e.target.value); setError(""); }}
           aria-label={q.title}
         />
