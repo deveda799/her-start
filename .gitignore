@@ -33,3 +33,4 @@ npm-debug.log*
 .vercel
 her-start-deploy.tar.gz
 *.tar.gz
+tmp/

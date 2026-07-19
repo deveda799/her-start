@@ -59,20 +59,26 @@ function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof localStorage !== "undefined";
 }
 
-/** 清除所有 Her Start 相关旧版数据 */
+/** 清除所有 Her Start 相关旧版数据（不包含当前版本 v4） */
 export function purgeAllHerStartData() {
   if (!isBrowser()) return;
   try {
-    // 清除当前版本
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(RESULT_KEY);
-    // 清除缓存
     const keys = Object.keys(localStorage);
     for (const k of keys) {
-      if (k.startsWith(CACHE_PREFIX)) localStorage.removeItem(k);
-      // 清除旧版 key
+      if (k.startsWith(CACHE_PREFIX)) {
+        localStorage.removeItem(k);
+        continue;
+      }
+      if (k === STORAGE_KEY || k === RESULT_KEY) continue;
       for (const pattern of OLD_KEY_PATTERNS) {
-        if (k.startsWith(pattern) || k === pattern) localStorage.removeItem(k);
+        if (k === pattern || k.startsWith(pattern)) {
+          if (!k.startsWith("her-start:v4:")) {
+            localStorage.removeItem(k);
+          }
+          break;
+        }
       }
     }
   } catch { /* ignore */ }
@@ -82,10 +88,11 @@ export function purgeAllHerStartData() {
 export function loadProgress(): ProgressData {
   if (!isBrowser()) return { ...EMPTY };
   try {
-    // 先检查是否有旧版数据需要清除
+    // 先检查是否有旧版数据需要清除（不匹配 v4）
     const keys = Object.keys(localStorage);
     let hasOldData = false;
     for (const k of keys) {
+      if (k.startsWith("her-start:v4:")) continue; // 跳过当前版本
       for (const pattern of OLD_KEY_PATTERNS) {
         if (k.startsWith(pattern) || k === pattern) {
           hasOldData = true;
@@ -95,9 +102,17 @@ export function loadProgress(): ProgressData {
       if (hasOldData) break;
     }
     if (hasOldData) {
-      // 旧版数据：不迁移，直接清除
-      purgeAllHerStartData();
-      return { ...EMPTY };
+      // 旧版数据：不迁移，只清除旧版 key
+      const oldKeys = keys.filter(k => !k.startsWith("her-start:v4:"));
+      for (const k of oldKeys) {
+        for (const pattern of OLD_KEY_PATTERNS) {
+          if (k.startsWith(pattern) || k === pattern) {
+            localStorage.removeItem(k);
+            break;
+          }
+        }
+      }
+      // 不清除 v4 数据，继续正常加载
     }
 
     const raw = localStorage.getItem(STORAGE_KEY);
