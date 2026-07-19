@@ -37,12 +37,9 @@ export async function POST(request: NextRequest) {
     const model = process.env.AI_MODEL || "unknown";
 
     try {
-      // 比赛版：ENABLE_AI_FOLLOWUP=false 时关闭动态追问，直接生成完整结果
-      const enableFollowup = process.env.ENABLE_AI_FOLLOWUP !== "false";
-      const effectiveFollowupUsed = !enableFollowup || Boolean(input.followupUsed);
-
+      // 比赛版：直接生成完整结果，不追问
       const result = await analyzeWithProvider(input.answers, {
-        followupUsed: effectiveFollowupUsed,
+        followupUsed: true,
         followupQ: input.followup?.question,
         followupA: input.followup?.answer,
       });
@@ -52,7 +49,7 @@ export async function POST(request: NextRequest) {
         analysisId,
         success: true,
         durationMs: Date.now() - now,
-        followupUsed: Boolean(input.followupUsed),
+        followupUsed: true,
         status: result.status,
         mode: "ai",
         model,

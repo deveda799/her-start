@@ -93,24 +93,7 @@ export async function analyzeWithProvider(
   if (!apiKey || !baseUrl || !model) throw new Error("AI_NOT_CONFIGURED");
   const cfg: AIConfig = { apiKey, baseUrl, model };
 
-  const followupUsed = options?.followupUsed ?? false;
-
-  // 第二次调用：必须返回 complete
-  if (followupUsed && options?.followupQ && options?.followupA) {
-    const { result, usage } = await callAI(cfg, FINALIZE_PROMPT, analysisSchema, [
-      { role: "system", content: FINALIZE_PROMPT },
-      { role: "user", content: buildFinalizeInput(answers, options.followupQ, options.followupA) },
-    ]);
-    return { status: "complete", result, usage };
-  }
-
-  // 第一次调用：先判断是否需要追问
-  const { followup, usage: followupUsage } = await checkNeedsFollowup(cfg, answers);
-  if (followup) {
-    return { status: "needs_followup", followup, usage: followupUsage };
-  }
-
-  // 信息充分，直接生成
+  // 比赛版：直接生成完整结果，跳过追问判断
   const { result, usage } = await callAI(cfg, SYSTEM_PROMPT, analysisSchema, [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: answers.map((a, i) => `回答${i + 1}：${a}`).join("\n") },
