@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useProgress, getStage, saveProgress, BUILD_VERSION } from "@/lib/her-start/use-progress";
+import { useProgress, getStage, saveProgress, loadProgress, BUILD_VERSION } from "@/lib/her-start/use-progress";
 
 const QUESTIONS = [
   {
@@ -141,7 +141,9 @@ function InterviewContent() {
     }
     setError("");
 
-    const nextAnswers = [...progress.answers];
+    // 从 localStorage 读取最新 answers，不依赖 React state（可能过期）
+    const fresh = loadProgress();
+    const nextAnswers = [...fresh.answers];
     nextAnswers[step] = answer;
     saveProgress({ answers: nextAnswers, step });
 
@@ -149,8 +151,8 @@ function InterviewContent() {
       setStep(step + 1);
     } else {
       setSubmitting(true);
-      update({ answers: nextAnswers, step });
-      router.push("/analyzing");
+      // 用 window.location.href 确保立即跳转，不依赖 React 异步 router.push
+      window.location.href = "/analyzing";
     }
   }
 
@@ -162,7 +164,8 @@ function InterviewContent() {
       setStep(NAME_STEP);
       return;
     }
-    saveProgress({ answers: progress.answers, step });
+    const freshPrev = loadProgress();
+    saveProgress({ answers: freshPrev.answers, step });
     setStep(step - 1);
   }
 
@@ -181,7 +184,7 @@ function InterviewContent() {
     // 同步写入 localStorage，不依赖 React 异步 setState
     saveProgress({ followupAnswer, followupUsed: true });
     update({ followupAnswer, followupUsed: true });
-    router.push("/analyzing");
+    window.location.href = "/analyzing";
   }
 
   function skipFollowup() {
@@ -190,7 +193,7 @@ function InterviewContent() {
     // 跳过追问，直接基于四问生成
     saveProgress({ followupAnswer: null, followupUsed: false });
     update({ followupAnswer: null, followupUsed: false });
-    router.push("/analyzing");
+    window.location.href = "/analyzing";
   }
 
   function toggleChip(label: string) {
