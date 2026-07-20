@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useProgress, getStage, getProgressPercent, getLevel } from "@/lib/her-start/use-progress";
+import { useRouter } from "next/navigation";
+import { useProgress, getStage, getProgressPercent, getLevel, resetAllProgress } from "@/lib/her-start/use-progress";
 import { ValueMirrorLogo } from "@/components/her-start/brand-icons";
 import { BottomNav } from "@/components/her-start/bottom-nav";
 
 export default function HomePage() {
-  const { progress, loaded } = useProgress();
+  const { progress, loaded, reset } = useProgress();
+  const router = useRouter();
   const stage = getStage(progress);
   const percent = getProgressPercent(stage);
   const level = getLevel(progress.points);
@@ -20,6 +22,11 @@ export default function HomePage() {
   }
 
   const completed = stage === "completed";
+
+  function startNew() {
+    reset();
+    router.push("/interview");
+  }
 
   return (
     <div className="app-shell">
@@ -53,16 +60,22 @@ export default function HomePage() {
           <div className="task-title">第一关 · 看见自己</div>
           <p className="task-desc">完成4个问题，让 Value Mirror 从你的经历中找到3项核心人生资产。</p>
           {stage === "idle" && (
-            <Link href="/interview" className="btn btn-primary btn-full">进入第一关</Link>
+            <button onClick={startNew} className="btn btn-primary btn-full">开始照见我的人生资产</button>
           )}
           {stage === "interviewing" && (
-            <Link href="/interview" className="btn btn-primary btn-full">继续开局</Link>
+            <>
+              <Link href="/interview" className="btn btn-primary btn-full">继续开局</Link>
+              <button onClick={startNew} className="btn btn-ghost btn-full" style={{ marginTop: 12 }}>重新开始</button>
+            </>
           )}
           {stage === "needs_followup" && !completed && (
             <Link href="/interview" className="btn btn-primary btn-full">继续完成分析</Link>
           )}
           {completed && (
-            <Link href="/result" className="btn btn-primary btn-full">查看我的开局成果</Link>
+            <>
+              <Link href="/result" className="btn btn-primary btn-full">查看我的开局成果</Link>
+              <button onClick={startNew} className="btn btn-ghost btn-full" style={{ marginTop: 12 }}>开始新的照见</button>
+            </>
           )}
         </section>
 
